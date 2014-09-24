@@ -14,12 +14,6 @@ if PREBUILT_STACK_URL
 end
 
 
-$script = <<SCRIPT
-echo I am provisioning...
-date > /etc/vagrant_provisioned_at
-SCRIPT
-
-
 Vagrant::configure("2") do |config|
   config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
   config.vm.box = BOX_NAME
@@ -36,12 +30,33 @@ Vagrant::configure("2") do |config|
     vb.customize ["modifyvm", :id, "--ostype", "Ubuntu_64"]
     vb.customize ["modifyvm", :id, "--memory", BOX_MEMORY]
   end
-  
-  pkg_cmd = "wget -q -O - https://get.docker.io/gpg | apt-key add -;" \
+
+  base_cmd = "echo 'running shell ...';"
+
+  docker_cmd = "wget -q -O - https://get.docker.io/gpg | apt-key add -;" \
       "echo deb http://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list;" \
       "apt-get update -qq; apt-get install -q -y --force-yes lxc-docker git software-properties-common nginx aufs-tools apache2-utils linux-image-extra-virtual;"
     # Add vagrant user to the docker group
-  pkg_cmd << "usermod -a -G docker vagrant; "
-  pkg_cmd << "cd /root/dokku && #{make_cmd}"
-  config.vm.provision :shell, :inline => pkg_cmd
+  docker_cmd << "usermod -a -G docker vagrant;"
+
+
+  dokku_cmd = "cd /root/dokku && #{make_cmd}"
+
+  dokku_plugin_cmd = "cd /var/lib/dokku-alt/plugins ;"\
+     "git clone https://github.com/musicglue/dokku-user-env-compile.git user-env-compile ;"\
+     "dokku plugins-install ;"\
+
+  shipyard_cmd = "docker run -d -P --name rethinkdb shipyard/rethinkdb ;"\
+        "docker run -d -p 8080:8080 --link rethinkdb:rethinkdb shipyard/shipyard  ;"\
+        "shipyard cli> shipyard add-account -u hello -p shipyard -r user ;"
+
+  base_cmd << docker_cmd
+  base_cmd << dokku_cmd
+  # base_cmd << dokku_plugin_cmd
+  # base_cmd << shipyard_cmd
+
+  config.vm.provision :shell, :inline => base_cmd
+
+  # run cat ~/.ssh/id_rsa.pub | vagrant ssh -- sudo sshcommand acl-add dokku ${USER}
+
 end
